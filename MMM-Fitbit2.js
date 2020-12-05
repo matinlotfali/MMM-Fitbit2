@@ -285,7 +285,9 @@ Module.register("MMM-Fitbit2", {
 			wrapper.className = "wrapper"
 
 			for (resource in this.config.resources) {
-				wrapper.appendChild(this.UIElement(this.config.resources[resource]));
+				if(this.config.resources[resource] !== "heartRateHistorical" &&
+					this.config.resources[resource] !== "bodyWeightHistorical")
+					wrapper.appendChild(this.UIElement(this.config.resources[resource]));
 			}
 
 			if (this.config.showLastSynced) {

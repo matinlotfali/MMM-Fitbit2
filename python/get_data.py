@@ -13,284 +13,319 @@ import argparse
 
 
 def print_data(resource, data, goal, debug=False):
-    if debug is True and not debug_mode:
-        return
+  if debug is True and not debug_mode:
+    return
 
-    print(json.dumps({"type": "data", "resource": resource,
-                      "values": {"data": data, "goal": goal}}))
+  print(json.dumps({"type": "data", "resource": resource,
+                    "values": {"data": data, "goal": goal}}))
 
 
 def print_empty_resource(resource):
-    # Print out resource value anyway. This will show as empty
-    # in the module and allows other data to be fetched
-    print_data(
-        resource=resource,
-        data=0,
-        goal=1
-    )
+  # Print out resource value anyway. This will show as empty
+  # in the module and allows other data to be fetched
+  print_data(
+    resource=resource,
+    data=0,
+    goal=1
+  )
 
 
 def handle_key_error(key_error, resource=None):
-    print_json("error", str(key_error))
-    if resource is not None:
-        print_empty_resource(resource)
+  print_json("error", str(key_error))
+  if resource is not None:
+    print_empty_resource(resource)
 
 
 if __name__ == "__main__":
 
-    print_json("debug", "Python Version", python_version())
+  print_json("debug", "Python Version", python_version())
 
-    parser = argparse.ArgumentParser()
+  parser = argparse.ArgumentParser()
 
-    parser.add_argument('-d', '--debug', action='store_true', default=False)
-    # TODO: print dummy data if this is called
-    parser.add_argument('-t', '--test', action='store_true', default=False)
+  parser.add_argument('-d', '--debug', action='store_true', default=False)
+  # TODO: print dummy data if this is called
+  parser.add_argument('-t', '--test', action='store_true', default=False)
 
-    parser.add_argument("client_id", type=str)
-    parser.add_argument("client_secret", type=str)
+  parser.add_argument("client_id", type=str)
+  parser.add_argument("client_secret", type=str)
 
-    parser.add_argument('-r', '--resources', nargs='+')
+  parser.add_argument('-r', '--resources', nargs='+')
 
-    args = parser.parse_args()
+  args = parser.parse_args()
 
-    debug_mode = args.debug
+  debug_mode = args.debug
 
-    client_id = args.client_id
-    client_secret = args.client_secret
+  client_id = args.client_id
+  client_secret = args.client_secret
 
-    resource_list = args.resources
+  resource_list = args.resources
 
-    set_debug_state(debug_mode)
-    print_json("status", "Debug Mode", str(debug_mode))
+  set_debug_state(debug_mode)
+  print_json("status", "Debug Mode", str(debug_mode))
 
-    set_token_client_id(client_id)
-    print_json("status", "Client ID", str(client_id))
+  set_token_client_id(client_id)
+  print_json("status", "Client ID", str(client_id))
 
-    print_json("debug", "Client Secret", str(client_secret))
+  print_json("debug", "Client Secret", str(client_secret))
 
-    resource_list_str = ", ".join(resource_list) \
-        if len(resource_list) > 0 else "All"
-    print_json("status", "Resources to get", resource_list_str)
+  resource_list_str = ", ".join(resource_list) \
+    if len(resource_list) > 0 else "All"
+  print_json("status", "Resources to get", resource_list_str)
 
-    access_token, refresh_token, expires_at = read_tokens()
-    print_json("debug", "access_token", access_token)
-    print_json("debug", "refresh_token", refresh_token)
-    print_json("debug", "expires_at", expires_at)
+  access_token, refresh_token, expires_at = read_tokens()
+  print_json("debug", "access_token", access_token)
+  print_json("debug", "refresh_token", refresh_token)
+  print_json("debug", "expires_at", expires_at)
 
-    def WriteTokenWrapper(token):
-        print_json("status", "Access token expired - refreshing tokens")
+
+  def WriteTokenWrapper(token):
+    print_json("status", "Access token expired - refreshing tokens")
+    print_data(
+      resource=token,
+      data=0,
+      goal=1,
+      debug=True
+    )
+    acc_tok = token["access_token"]
+    ref_tok = token["refresh_token"]
+    expires_at = token["expires_at"]
+    write_tokens(acc_tok, ref_tok, expires_at)
+
+
+  print_json("debug", "Creating authorised client")
+  authd_client = fitbit.Fitbit(client_id,
+                               client_secret,
+                               system="METRIC",
+                               oauth2=True,
+                               access_token=access_token,
+                               refresh_token=refresh_token,
+                               expires_at=expires_at,
+                               refresh_cb=WriteTokenWrapper,
+                               redirect_uri="http://127.0.0.1:8888/"
+                               )
+
+  print_json("debug", "Polling API for data")
+  #####################################################
+  print_json("status", "API polling stage", "Activity")
+  #####################################################
+  activity_resources_all = [
+    "steps", "caloriesOut", "distance", "activeMinutes", "floors"]
+  activity_resources_easy_parse = ["steps", "caloriesOut", "floors"]
+
+  if len(resource_list) == 0 or \
+    any(item in activity_resources_all for item in resource_list):
+
+    activity_list = authd_client.activities()
+
+    activity_summary = activity_list["summary"]
+    activity_goals = activity_list["goals"]
+    # --------------
+    if len(resource_list) == 0:
+      activity_resources_selected = activity_resources_easy_parse
+    else:
+      activity_resources_selected = set(resource_list) & \
+                                    set(activity_resources_easy_parse)
+
+    # Get resources that are easy to parse
+    for resource in activity_resources_selected:
+      try:
         print_data(
-            resource=token,
-            data=0,
-            goal=1,
-            debug=True
+          resource=resource,
+          data=activity_summary[resource],
+          goal=activity_goals[resource]
         )
-        acc_tok = token["access_token"]
-        ref_tok = token["refresh_token"]
-        expires_at = token["expires_at"]
-        write_tokens(acc_tok, ref_tok, expires_at)
+      except KeyError as err:
+        handle_key_error(err, resource)
 
-    print_json("debug", "Creating authorised client")
-    authd_client = fitbit.Fitbit(client_id,
-                                 client_secret,
-                                 system="METRIC",
-                                 oauth2=True,
-                                 access_token=access_token,
-                                 refresh_token=refresh_token,
-                                 expires_at=expires_at,
-                                 refresh_cb=WriteTokenWrapper,
-                                 redirect_uri="http://127.0.0.1:8888/"
-                                 )
+    # These require more complicated parsing
+    if len(resource_list) == 0 or "activeMinutes" in resource_list:
+      try:
+        active_minutes = activity_summary["fairlyActiveMinutes"] + \
+                         activity_summary["veryActiveMinutes"]
+        print_data(
+          resource="activeMinutes",
+          data=active_minutes,
+          goal=activity_goals["activeMinutes"]
+        )
+      except KeyError as err:
+        handle_key_error(err, "activeMinutes")
 
-    print_json("debug", "Polling API for data")
-    #####################################################
-    print_json("status", "API polling stage", "Activity")
-    #####################################################
-    activity_resources_all = [
-        "steps", "caloriesOut", "distance", "activeMinutes", "floors"]
-    activity_resources_easy_parse = ["steps", "caloriesOut", "floors"]
+    if len(resource_list) == 0 or "distance" in resource_list:
+      try:
+        distances_data = activity_summary["distances"]
 
-    if len(resource_list) == 0 or \
-            any(item in activity_resources_all for item in resource_list):
+        # Get total distance
+        distance = None
+        for x in distances_data:
+          if x["activity"] == "total":
+            distance = x["distance"]
+            break
 
-        activity_list = authd_client.activities()
-
-        activity_summary = activity_list["summary"]
-        activity_goals = activity_list["goals"]
-        # --------------
-        if len(resource_list) == 0:
-            activity_resources_selected = activity_resources_easy_parse
+        if distance is None:
+          print_empty_resource("distance")
         else:
-            activity_resources_selected = set(resource_list) & \
-                set(activity_resources_easy_parse)
+          print_data(
+            resource="distance",
+            data=distance,
+            goal=activity_goals["distance"]
+          )
+      except KeyError as err:
+        handle_key_error(err, "distance")
 
-        # Get resources that are easy to parse
-        for resource in activity_resources_selected:
-            try:
-                print_data(
-                    resource=resource,
-                    data=activity_summary[resource],
-                    goal=activity_goals[resource]
-                )
-            except KeyError as err:
-                handle_key_error(err, resource)
+  ##################################################
+  print_json("status", "API polling stage", "Sleep")
+  ##################################################
+  if len(resource_list) == 0 or "sleep" in resource_list:
+    try:
+      sleep_data = authd_client.sleep()
 
-        # These require more complicated parsing
-        if len(resource_list) == 0 or "activeMinutes" in resource_list:
-            try:
-                active_minutes = activity_summary["fairlyActiveMinutes"] + \
-                    activity_summary["veryActiveMinutes"]
-                print_data(
-                    resource="activeMinutes",
-                    data=active_minutes,
-                    goal=activity_goals["activeMinutes"]
-                )
-            except KeyError as err:
-                handle_key_error(err, "activeMinutes")
 
-        if len(resource_list) == 0 or "distance" in resource_list:
-            try:
-                distances_data = activity_summary["distances"]
-
-                # Get total distance
-                distance = None
-                for x in distances_data:
-                    if x["activity"] == "total":
-                        distance = x["distance"]
-                        break
-
-                if distance is None:
-                    print_empty_resource("distance")
-                else:
-                    print_data(
-                        resource="distance",
-                        data=distance,
-                        goal=activity_goals["distance"]
-                    )
-            except KeyError as err:
-                handle_key_error(err, "distance")
-
-    ##################################################
-    print_json("status", "API polling stage", "Sleep")
-    ##################################################
-    if len(resource_list) == 0 or "sleep" in resource_list:
-        try:
-            sleep_data = authd_client.sleep()
-
-            # python-fitbit does not have this function
-            # so we make it ourselves
-            def get_sleep_goal(fitbit_client):
-                """
+      # python-fitbit does not have this function
+      # so we make it ourselves
+      def get_sleep_goal(fitbit_client):
+        """
                 https://dev.fitbit.com/build/reference/web-api/sleep/#sleep-goals
                 """
-                url = "{0}/{1}/user/-/sleep/goal.json".format(
-                    *fitbit_client._get_common_args()
-                )
-                return fitbit_client.make_request(url)
+        url = "{0}/{1}/user/-/sleep/goal.json".format(
+          *fitbit_client._get_common_args()
+        )
+        return fitbit_client.make_request(url)
 
-            sleep_goal_data = get_sleep_goal(authd_client)
 
-            sleep_summary = sleep_data["summary"]
-            total_minutes_asleep = sleep_summary["totalMinutesAsleep"]
-            sleep_goal = sleep_goal_data["goal"]["minDuration"]
-            # --------------
-            print_data(
-                resource="sleep",
-                data=total_minutes_asleep,
-                goal=sleep_goal
-            )
-        except KeyError as err:
-            handle_key_error(err, "sleep")
+      sleep_goal_data = get_sleep_goal(authd_client)
 
-    ##################################################
-    print_json("status", "API polling stage", "Heart")
-    ##################################################
-    if len(resource_list) == 0 or "restingHeart" in resource_list:
-        try:
-            heart_time_series_data = authd_client.time_series(
-                "activities/heart", period="1d")
-            heart_summary_time_series = heart_time_series_data["activities-heart"]
+      sleep_summary = sleep_data["summary"]
+      total_minutes_asleep = sleep_summary["totalMinutesAsleep"]
+      sleep_goal = sleep_goal_data["goal"]["minDuration"]
+      # --------------
+      print_data(
+        resource="sleep",
+        data=total_minutes_asleep,
+        goal=sleep_goal
+      )
+    except KeyError as err:
+      handle_key_error(err, "sleep")
 
-            heart_summary_today = heart_summary_time_series[0]["value"]
-            resting_heart_rate = heart_summary_today["restingHeartRate"]
+  ##################################################
+  print_json("status", "API polling stage", "Heart")
+  ##################################################
+  if len(resource_list) == 0 or "restingHeart" in resource_list:
+    try:
+      heart_time_series_data = authd_client.time_series(
+        "activities/heart", period="1d")
+      heart_summary_time_series = heart_time_series_data["activities-heart"]
 
-            # --------------
-            print_data(
-                resource="restingHeart",
-                data=resting_heart_rate,
-                goal=0
-            )
-        except KeyError as err:
-            handle_key_error(err, "restingHeart")
+      heart_summary_today = heart_summary_time_series[0]["value"]
+      resting_heart_rate = heart_summary_today["restingHeartRate"]
 
-    ###################################################
-    print_json("status", "API polling stage", "Weight")
-    ###################################################
-    if len(resource_list) == 0 or "weight" in resource_list:
-        try:
-            weight_data = authd_client.get_bodyweight(period="1m")["weight"]
-            weight_goal_data = authd_client.body_weight_goal()
+      # --------------
+      print_data(
+        resource="restingHeart",
+        data=resting_heart_rate,
+        goal=0
+      )
+    except KeyError as err:
+      handle_key_error(err, "restingHeart")
 
-            if len(weight_data) > 0:
-                last_weight_log = weight_data[-1]
-                weight_current_kg = last_weight_log["weight"]
-            else:
-                weight_current_kg = -1
+  ###################################################
+  print_json("status", "API polling stage", "Weight")
+  ###################################################
+  if len(resource_list) == 0 or "weight" in resource_list:
+    try:
+      weight_data = authd_client.get_bodyweight(period="1m")["weight"]
+      weight_goal_data = authd_client.body_weight_goal()
 
-            # weight_start_kg = weight_goal_data["goal"]["startWeight"]
-            weight_goal_kg = weight_goal_data["goal"]["weight"]
-            # --------------
-            print_data(
-                resource="weight",
-                data=weight_current_kg,
-                goal=weight_goal_kg
-            )
-        except KeyError as err:
-            handle_key_error(err, "weight")
+      if len(weight_data) > 0:
+        last_weight_log = weight_data[-1]
+        weight_current_kg = last_weight_log["weight"]
+      else:
+        weight_current_kg = -1
 
-    #################################################
-    print_json("status", "API polling stage", "Food")
-    #################################################
-    if len(resource_list) == 0 or "caloriesIn" in resource_list:
-        try:
-            calories_in_time_series_data = authd_client.time_series(
-                "foods/log/caloriesIn", period="1d")
-            food_goal_data = authd_client.food_goal()
+      # weight_start_kg = weight_goal_data["goal"]["startWeight"]
+      weight_goal_kg = weight_goal_data["goal"]["weight"]
+      # --------------
+      print_data(
+        resource="weight",
+        data=weight_current_kg,
+        goal=weight_goal_kg
+      )
+    except KeyError as err:
+      handle_key_error(err, "weight")
 
-            calories_in_current = sum(float(c["value"])
-                                      for c in calories_in_time_series_data["foods-log-caloriesIn"])
-            calories_in_goal = food_goal_data["goals"]["calories"]
-            # --------------
-            print_data(
-                resource="caloriesIn",
-                data=max(int(calories_in_goal - calories_in_current), 0),
-                goal=0
-            )
-        except KeyError as err:
-            handle_key_error(err, "caloriesIn")
+  #################################################
+  print_json("status", "API polling stage", "Food")
+  #################################################
+  if len(resource_list) == 0 or "caloriesIn" in resource_list:
+    try:
+      calories_in_time_series_data = authd_client.time_series(
+        "foods/log/caloriesIn", period="1d")
+      food_goal_data = authd_client.food_goal()
 
-    ##################################################
-    print_json("status", "API polling stage", "Water")
-    ##################################################
-    if len(resource_list) == 0 or "water" in resource_list:
-        try:
-            water_time_series_data = authd_client.time_series(
-                "foods/log/water", period="1d")
-            water_goal_data = authd_client.water_goal()
+      calories_in_current = sum(float(c["value"])
+                                for c in calories_in_time_series_data["foods-log-caloriesIn"])
+      calories_in_goal = food_goal_data["goals"]["calories"]
+      # --------------
+      print_data(
+        resource="caloriesIn",
+        data=max(int(calories_in_goal - calories_in_current), 0),
+        goal=0
+      )
+    except KeyError as err:
+      handle_key_error(err, "caloriesIn")
 
-            water_summary_time_series = water_time_series_data["foods-log-water"]
+  ##################################################
+  print_json("status", "API polling stage", "Water")
+  ##################################################
+  if len(resource_list) == 0 or "water" in resource_list:
+    try:
+      water_time_series_data = authd_client.time_series(
+        "foods/log/water", period="1d")
+      water_goal_data = authd_client.water_goal()
 
-            water_summary_today = water_summary_time_series[0]["value"]
+      water_summary_time_series = water_time_series_data["foods-log-water"]
 
-            water_consumed_today_ml = float(water_summary_today)
-            water_goal_today_ml = water_goal_data["goal"]["goal"]
+      water_summary_today = water_summary_time_series[0]["value"]
 
-            water_remaining_today_ml = water_goal_today_ml - water_consumed_today_ml
-            # --------------
-            print_data(
-                resource="water",
-                data=max(int(round(water_remaining_today_ml)), 0),
-                goal=0
-            )
-        except KeyError as err:
-            handle_key_error(err, "water")
+      water_consumed_today_ml = float(water_summary_today)
+      water_goal_today_ml = water_goal_data["goal"]["goal"]
+
+      water_remaining_today_ml = water_goal_today_ml - water_consumed_today_ml
+      # --------------
+      print_data(
+        resource="water",
+        data=max(int(round(water_remaining_today_ml)), 0),
+        goal=0
+      )
+    except KeyError as err:
+      handle_key_error(err, "water")
+
+  ##################################################
+  print_json("status", "API polling stage", "HeartRateHistorical")
+  ##################################################
+  if len(resource_list) == 0 or "heartRateHistorical" in resource_list:
+    try:
+      heart_time_series_data = authd_client.intraday_time_series("activities/heart")
+      heart_intraday_time_series = heart_time_series_data["activities-heart-intraday"]
+
+      heart_rate = heart_intraday_time_series['dataset']
+
+      # --------------
+      with open("modules/MMM-Fitbit2/heartRateHistorical.json","w") as f:
+        f.write(json.dumps(heart_rate))
+    except KeyError as err:
+      handle_key_error(err, "HeartRateHistorical")
+
+
+  ##################################################
+  print_json("status", "API polling stage", "BodyWeightHistorical")
+  ##################################################
+  if len(resource_list) == 0 or "bodyWeightHistorical" in resource_list:
+    try:
+      time_series_data = authd_client.time_series("body/weight", user_id="-", period="3m")
+      time_series = time_series_data["body-weight"]
+
+      # --------------
+      with open("modules/MMM-Fitbit2/bodyWeightHistorical.json", "w") as f:
+        f.write(json.dumps(time_series))
+    except KeyError as err:
+      handle_key_error(err, "BodyWeightHistorical")

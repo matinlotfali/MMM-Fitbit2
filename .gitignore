@@ -248,3 +248,7 @@ dist
 #########################
 .DS_Store
 python/*.json
+
+bodyWeightHistorical.json
+
+heartRateHistorical.json

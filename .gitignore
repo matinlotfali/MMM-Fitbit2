@@ -252,3 +252,5 @@ python/*.json
 bodyWeightHistorical.json
 
 heartRateHistorical.json
+
+userProfile.json

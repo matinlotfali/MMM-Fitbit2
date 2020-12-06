@@ -329,3 +329,17 @@ if __name__ == "__main__":
         f.write(json.dumps(time_series))
     except KeyError as err:
       handle_key_error(err, "BodyWeightHistorical")
+
+  ##################################################
+  print_json("status", "API polling stage", "UserProfile")
+  ##################################################
+  if len(resource_list) == 0 or "userProfile" in resource_list:
+    try:
+      profile = authd_client.user_profile_get()
+      profile = profile["user"]
+
+      # --------------
+      with open("modules/MMM-Fitbit2/userProfile.json", "w") as f:
+        f.write(json.dumps(profile))
+    except KeyError as err:
+      handle_key_error(err, "userProfile")
